@@ -3,7 +3,8 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from mpl_toolkits.mplot3d import Axes3D
+from tqdm import tqdm
+from matplotlib.animation import FFMpegWriter
 
 # Load CSV
 if len(sys.argv) < 2:
@@ -38,6 +39,10 @@ velocity = np.array([0.0, 0.0, 0.0])
 trail_line = None
 trail = []
 
+xy_line = None
+yz_line = None
+xz_line = None
+
 # Estimasi posisi untuk hitung jangkauan
 velocity_tmp = np.array([0.0, 0.0, 0.0])
 position_tmp = np.array([0.0, 0.0, 0.0])
@@ -63,42 +68,118 @@ ax.set_ylabel("Y")
 ax.set_zlabel("Z")
 ax.set_title("IMU Accelerometer Vector (Direction)")
 
-def update(frame):
-    global quiver, trail_line, position, velocity, trail
+from scipy.spatial.transform import Rotation as R
 
+# Split accel and gyro data
+acc_data = np.array(data)[:, 0:3]  # ax, ay, az
+gyro_data = np.array(data)[:, 3:6]  # gx, gy, gz
+
+# Orientation initial (identity quaternion)
+orientation = R.from_quat([0, 0, 0, 1])  # x, y, z, w
+
+# Compute scale factor for quiver arrow size
+range_scale = max(x_max - x_min, y_max - y_min, z_max - z_min)
+arrow_length = range_scale * 0.01  # 1% of the largest axis span
+
+
+def update(frame):
+    global quiver, trail_line, position, velocity, trail, orientation
+    global xy_line, yz_line, xz_line
+
+    # Remove old objects
     if quiver:
         quiver.remove()
     if trail_line:
         trail_line.remove()
+    if xy_line:
+        xy_line.remove()
+    if yz_line:
+        yz_line.remove()
+    if xz_line:
+        xz_line.remove()
 
     acc = acc_data[frame]
-    dt = 1  # anggap interval = 1 untuk simpel
+    gyro = gyro_data[frame]
+    dt = 1
 
-    # Update velocity dan posisi
+    # Orientation update
+    angle = np.linalg.norm(gyro * dt)
+    if angle != 0:
+        axis = gyro / angle
+        delta_rotation = R.from_rotvec(axis * angle)
+        orientation = orientation * delta_rotation
+
+    # Position update
     velocity += acc * dt
     position += velocity * dt
-
-    # Tambahkan ke trail
     trail.append(position.copy())
-    if len(trail) > 500:  # batas panjang jejak
-        trail.pop(0)
 
-    # Gambar arah panah dari posisi sekarang
-    direction = normalize(velocity)
+    # Orientation vectors
+    forward = normalize(orientation.apply([0, 0, 1]))  # Z+
+    right = normalize(orientation.apply([1, 0, 0]))    # X+
+    up = normalize(orientation.apply([0, 1, 0]))       # Y+
+
+    # Draw heading arrow (quiver)
     quiver = ax.quiver(
         position[0], position[1], position[2],
-        direction[0], direction[1], direction[2],
-        color='r'
+        forward[0], forward[1], forward[2],
+        color='g', length=arrow_length
     )
 
-    # Gambar trail sebagai garis
+    # Plane line length
+    plane_len = arrow_length * 2
+
+    # Draw animated planes
+    xy_start = position - right * plane_len / 2 - up * plane_len / 2
+    xy_end_x = xy_start + right * plane_len
+    xy_end_y = xy_start + up * plane_len
+    xy_line = ax.plot3D(
+        [xy_start[0], xy_end_x[0]], [xy_start[1], xy_end_x[1]], [xy_start[2], xy_end_x[2]],
+        'r'
+    )[0]
+    ax.plot3D(
+        [xy_start[0], xy_end_y[0]], [xy_start[1], xy_end_y[1]], [xy_start[2], xy_end_y[2]],
+        'r'
+    )
+
+    yz_start = position - up * plane_len / 2 - forward * plane_len / 2
+    yz_end_y = yz_start + up * plane_len
+    yz_end_z = yz_start + forward * plane_len
+    yz_line = ax.plot3D(
+        [yz_start[0], yz_end_y[0]], [yz_start[1], yz_end_y[1]], [yz_start[2], yz_end_y[2]],
+        'g'
+    )[0]
+    ax.plot3D(
+        [yz_start[0], yz_end_z[0]], [yz_start[1], yz_end_z[1]], [yz_start[2], yz_end_z[2]],
+        'g'
+    )
+
+    xz_start = position - right * plane_len / 2 - forward * plane_len / 2
+    xz_end_x = xz_start + right * plane_len
+    xz_end_z = xz_start + forward * plane_len
+    xz_line = ax.plot3D(
+        [xz_start[0], xz_end_x[0]], [xz_start[1], xz_end_x[1]], [xz_start[2], xz_end_x[2]],
+        'b'
+    )[0]
+    ax.plot3D(
+        [xz_start[0], xz_end_z[0]], [xz_start[1], xz_end_z[1]], [xz_start[2], xz_end_z[2]],
+        'b'
+    )
+
+    # Trail
     trail_np = np.array(trail)
-    trail_line = ax.plot3D(trail_np[:,0], trail_np[:,1], trail_np[:,2], 'b')[0]
+    trail_line = ax.plot3D(trail_np[:, 0], trail_np[:, 1], trail_np[:, 2], 'k')[0]
 
-    return quiver, trail_line
+    return quiver, trail_line, xy_line, yz_line, xz_line
 
-ani = FuncAnimation(fig, update, frames=len(acc_data), interval=50, blit=False)
+
+frames = len(acc_data)
+ani = FuncAnimation(fig, update, frames=frames, interval=50, blit=False)
 
 mp4_file = f"video/{csv_file[4:-5]}.mp4"
-ani.save(mp4_file, writer="ffmpeg")
+writer = FFMpegWriter(fps=20)
+with writer.saving(fig, mp4_file, dpi=100):
+    for i in tqdm(range(frames), desc="Rendering animation"):
+        update(i)
+        writer.grab_frame()
 print(f"Animasi disimpan sebagai {mp4_file}")
