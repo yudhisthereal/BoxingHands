@@ -8,5 +8,8 @@ numpy==2.2.5
 packaging==25.0
 pillow==11.2.1
 pyparsing==3.2.3
+pyserial==3.5
 python-dateutil==2.9.0.post0
+scipy==1.15.2
 six==1.17.0
+tqdm==4.67.1
