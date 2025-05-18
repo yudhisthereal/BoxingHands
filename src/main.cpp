@@ -1,3 +1,5 @@
+#include "boxing_model_left.h"
+
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
@@ -5,13 +7,36 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
+#include "tensorflow/lite/micro/all_ops_resolver.h"
+#include "tensorflow/lite/micro/micro_error_reporter.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/schema/schema_generated.h"
+
 // Configuration macros
 #define USE_SERIAL 1
 #define USE_MQTT 1
+#define USE_DUMMY 1
 
 // I2C Pins
 #define SDA_PIN 21
 #define SCL_PIN 22
+
+// Tensorflow
+#define SEQ_LENGTH 12
+#define N_FEATURES 6
+
+float inputBuffer[SEQ_LENGTH][N_FEATURES] = {0};
+int inputIndex = 0;
+bool sequenceReady = false;
+
+constexpr int kArenaSize = 15 * 1024;
+uint8_t tensor_arena[kArenaSize];
+
+tflite::MicroErrorReporter error_reporter;
+const tflite::Model* model = nullptr;
+tflite::MicroInterpreter* interpreter = nullptr;
+TfLiteTensor* input = nullptr;
+TfLiteTensor* output = nullptr;
 
 // WiFi credentials
 const char* ssid = "Xiaomi Biru";
@@ -24,41 +49,12 @@ const char* mqtt_username = "CapstoneUser";
 const char* mqtt_password = "Mango!River_42Sun";
 
 // MQTT topics
-const char* topic_publish_data = "boxing/raw_data_left"; // raw data
+const char* topic_publish_data = "boxing/raw_data_right"; // raw data
 const char* topic_publish_punch = "boxing/punch_type"; // classification results
 const char* topic_subscribe = "boxing/control"; // Optional: for receiving commands
 
 // Moving Average Filter Configuration
-const int WINDOW_SIZE = 5; // Number of samples to average (adjust based on your needs)
-
-// Create instances
-WiFiClientSecure wifiClient;
-PubSubClient mqttClient(wifiClient);
-Adafruit_MPU6050 mpu;
-
-// Timing variables
-unsigned long previousMillis = 0;
-const long interval = 50; // 20Hz (50ms)
-
-// const float bias_IMU KANAN
-// const float bias_ax = 0.852;
-// const float bias_ay = -0.335;
-// const float bias_az = 0.376;
-// const float bias_gx = -0.023;
-// const float bias_gy = 0.002;
-// const float bias_gz = -0.016;
-
-// const float bias_IMU KIRI
-const float bias_ax = 1.073;
-const float bias_ay = -0.041;
-const float bias_az = 0.164;
-const float bias_gx = -0.107;
-const float bias_gy = -0.015;
-const float bias_gz = -0.020;
-
-// 
-
-// Data buffers for moving average
+const int WINDOW_SIZE = 5;
 float accelXBuffer[WINDOW_SIZE] = {0};
 float accelYBuffer[WINDOW_SIZE] = {0};
 float accelZBuffer[WINDOW_SIZE] = {0};
@@ -68,31 +64,40 @@ float gyroZBuffer[WINDOW_SIZE] = {0};
 int bufferIndex = 0;
 bool bufferFilled = false;
 
-// Moving average filter function
+// Dummy Punch
+int dummyPunchIndex = 0;
+
+// Bias (IMU KIRI)
+const float bias_ax = 1.073;
+const float bias_ay = -0.041;
+const float bias_az = 0.164;
+const float bias_gx = -0.107;
+const float bias_gy = -0.015;
+const float bias_gz = -0.020;
+
+WiFiClientSecure wifiClient;
+PubSubClient mqttClient(wifiClient);
+Adafruit_MPU6050 mpu;
+
+// Timing
+unsigned long previousMillis = 0;
+const long interval = 50;
+
+unsigned long previousPunchMillis = 0;
+const long punchInterval = 150;
+const char* punchTypes[] = {"straight", "uppercut"};
+const int numPunchTypes = sizeof(punchTypes) / sizeof(punchTypes[0]);
+
 float applyMovingAverage(float newValue, float buffer[], bool &bufferFilled) {
-  // Add new value to buffer
   buffer[bufferIndex] = newValue;
-  
-  // Calculate average
   float sum = 0;
   int count = bufferFilled ? WINDOW_SIZE : bufferIndex + 1;
-  
-  for (int i = 0; i < count; i++) {
-    sum += buffer[i];
-  }
-  
-  // Update index for next sample
+  for (int i = 0; i < count; i++) sum += buffer[i];
   bufferIndex = (bufferIndex + 1) % WINDOW_SIZE;
-  
-  // Check if buffer is completely filled
-  if (!bufferFilled && bufferIndex == 0) {
-    bufferFilled = true;
-  }
-  
+  if (!bufferFilled && bufferIndex == 0) bufferFilled = true;
   return sum / count;
 }
 
-// Callback function for incoming messages
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   #if USE_SERIAL
     Serial.print("Message arrived [");
@@ -114,22 +119,17 @@ void reconnect() {
   #if USE_SERIAL
     Serial.println("Connecting to MQTT Broker...");
   #endif
-  
   while (!mqttClient.connected()) {
     String clientId = "ESP32-MPU6050-";
-    clientId += String(random(0xffff), HEX); // Random client ID
-    
+    clientId += String(random(0xffff), HEX);
     #if USE_SERIAL
       Serial.print("Attempting connection as: ");
       Serial.println(clientId);
     #endif
-    
     if (mqttClient.connect(clientId.c_str(), mqtt_username, mqtt_password)) {
       #if USE_SERIAL
         Serial.println("Connected to MQTT Broker");
       #endif
-      
-      // Subscribe to control topic if needed
       mqttClient.subscribe(topic_subscribe);
     } else {
       #if USE_SERIAL
@@ -142,10 +142,34 @@ void reconnect() {
   }
 }
 
-unsigned long previousPunchMillis = 0;
-const long punchInterval = 150; // 150ms
-const char* punchTypes[] = {"jab", "hook", "no_punch", "no_punch", "no_punch"};
-const int numPunchTypes = sizeof(punchTypes) / sizeof(punchTypes[0]);
+void setupModel() {
+  Serial.println("=== [Model Setup Start] ===");
+
+  model = tflite::GetModel(boxing_model_left_tflite);
+  if (model == nullptr || model->version() != TFLITE_SCHEMA_VERSION) {
+    Serial.println("[ERROR] Failed to load or version mismatch.");
+    while (1);
+  }
+
+  static tflite::AllOpsResolver resolver;
+  static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, kArenaSize, &error_reporter);
+  interpreter = &static_interpreter;
+
+  if (interpreter->AllocateTensors() != kTfLiteOk) {
+    Serial.println("[ERROR] Failed to allocate tensors.");
+    while (1);
+  }
+
+  input = interpreter->input(0);
+  output = interpreter->output(0);
+
+  if (!input || !output) {
+    Serial.println("[ERROR] Tensor NULL.");
+    while (1);
+  }
+
+  Serial.println("=== [Model Setup Complete] ===");
+}
 
 void setup() {
   #if USE_SERIAL
@@ -154,105 +178,130 @@ void setup() {
     Serial.println("Initializing MPU6050...");
   #endif
 
-  // Initialize I2C
   Wire.begin(SDA_PIN, SCL_PIN);
 
-  // Initialize MPU6050
   if (!mpu.begin()) {
-    #if USE_SERIAL
-      Serial.println("Failed to find MPU6050 chip");
-    #endif
-    while (1) { delay(10); }
+    Serial.println("MPU6050 not found!");
+    while (1) delay(10);
   }
 
-  // Configure MPU6050
   mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
   mpu.setGyroRange(MPU6050_RANGE_500_DEG);
   mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
 
-  // Connect to WiFi
-  #if USE_SERIAL
-    Serial.print("Connecting to WiFi");
-  #endif
   
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    #if USE_SERIAL
-      Serial.print(".");
-    #endif
-  }
   
-  #if USE_SERIAL
+  #if USE_MQTT
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500); Serial.print(".");
+    }
     Serial.println("\nWiFi connected");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
+
+    wifiClient.setInsecure();
+    setupMQTT();
   #endif
 
-  // Configure MQTT (insecure for testing - replace with proper cert in production)
-  wifiClient.setInsecure(); // Bypass SSL certificate validation
-  setupMQTT();
+  #if USE_DUMMY
+  #else
+    setupModel(); // <<< Penting!
+  #endif
 }
 
 void loop() {
-  #if USE_MQTT
-    if (!mqttClient.connected()) {
-      reconnect();
-    }
-    mqttClient.loop();
-  #endif
+  if (!mqttClient.connected()) reconnect();
+  mqttClient.loop();
 
   unsigned long currentMillis = millis();
 
-  // Raw data publishing (every 50 ms)
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis;
 
-    // Read sensor data
     sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp);
 
-    // Apply moving average filter
-    float filteredAccelX = applyMovingAverage(a.acceleration.x, accelXBuffer, bufferFilled) + bias_ax;
-    float filteredAccelY = applyMovingAverage(a.acceleration.y, accelYBuffer, bufferFilled) + bias_ay;
-    float filteredAccelZ = applyMovingAverage(a.acceleration.z, accelZBuffer, bufferFilled) + bias_az;
-    float filteredGyroX = applyMovingAverage(g.gyro.x, gyroXBuffer, bufferFilled) + bias_gx;
-    float filteredGyroY = applyMovingAverage(g.gyro.y, gyroYBuffer, bufferFilled) + bias_gy;
-    float filteredGyroZ = applyMovingAverage(g.gyro.z, gyroZBuffer, bufferFilled) + bias_gz;
+    float ax = applyMovingAverage(a.acceleration.x, accelXBuffer, bufferFilled) + bias_ax;
+    float ay = applyMovingAverage(a.acceleration.y, accelYBuffer, bufferFilled) + bias_ay;
+    float az = applyMovingAverage(a.acceleration.z, accelZBuffer, bufferFilled) + bias_az;
+    float gx = applyMovingAverage(g.gyro.x, gyroXBuffer, bufferFilled) + bias_gx;
+    float gy = applyMovingAverage(g.gyro.y, gyroYBuffer, bufferFilled) + bias_gy;
+    float gz = applyMovingAverage(g.gyro.z, gyroZBuffer, bufferFilled) + bias_gz;
 
-    String sensorData = String(filteredAccelX, 3) + "," + 
-                        String(filteredAccelY, 3) + "," + 
-                        String(filteredAccelZ, 3) + "," + 
-                        String(filteredGyroX, 3) + "," + 
-                        String(filteredGyroY, 3) + "," + 
-                        String(filteredGyroZ, 3);
+    String sensorData = String(ax, 3) + "," + String(ay, 3) + "," + String(az, 3) + "," +
+                        String(gx, 3) + "," + String(gy, 3) + "," + String(gz, 3);
 
     #if USE_SERIAL
       Serial.println(sensorData);
     #endif
 
-    #if USE_MQTT
-      if (mqttClient.connected()) {
-        mqttClient.publish(topic_publish_data, sensorData.c_str());
-      }
-    #endif
+    mqttClient.publish(topic_publish_data, sensorData.c_str());
+
+    inputBuffer[inputIndex][0] = ax;
+    inputBuffer[inputIndex][1] = ay;
+    inputBuffer[inputIndex][2] = az;
+    inputBuffer[inputIndex][3] = gx;
+    inputBuffer[inputIndex][4] = gy;
+    inputBuffer[inputIndex][5] = gz;
+
+    inputIndex++;
+    if (inputIndex >= SEQ_LENGTH) {
+      sequenceReady = true;
+      inputIndex = 0;
+    }
   }
 
-  // Dummy punch type publishing (every 150 ms)
   if (currentMillis - previousPunchMillis >= punchInterval) {
     previousPunchMillis = currentMillis;
 
-    int randomIndex = random(0, numPunchTypes); // pick random punch type
-    String randomPunch = String(punchTypes[randomIndex]) + ", Left";
+    #if USE_DUMMY
+      // Calculate magnitude of acceleration
+      float accelMagnitude = sqrt(
+        inputBuffer[(inputIndex == 0 ? SEQ_LENGTH : inputIndex) - 1][0] * inputBuffer[(inputIndex == 0 ? SEQ_LENGTH : inputIndex) - 1][0] +
+        inputBuffer[(inputIndex == 0 ? SEQ_LENGTH : inputIndex) - 1][1] * inputBuffer[(inputIndex == 0 ? SEQ_LENGTH : inputIndex) - 1][1] +
+        inputBuffer[(inputIndex == 0 ? SEQ_LENGTH : inputIndex) - 1][2] * inputBuffer[(inputIndex == 0 ? SEQ_LENGTH : inputIndex) - 1][2]
+      );
 
-    #if USE_SERIAL
-      Serial.print("Dummy Punch: ");
-      Serial.println(randomPunch);
-    #endif
+      static bool sentNoPunch = false;
 
-    #if USE_MQTT
-      if (mqttClient.connected()) {
-        mqttClient.publish(topic_publish_punch, randomPunch.c_str());
+      if (accelMagnitude > 17.0) {
+        const char* dummyPunch = punchTypes[dummyPunchIndex];
+        dummyPunchIndex = (dummyPunchIndex + 1) % (numPunchTypes); 
+        String result = String(dummyPunch) + ", Right";
+        mqttClient.publish(topic_publish_punch, result.c_str());
+        sentNoPunch = false;
+      } else if (!sentNoPunch) {
+        String result = String("no_punch") + ", Right";
+        mqttClient.publish(topic_publish_punch, result.c_str());
+        sentNoPunch = true;
+      }
+    #else
+      if (sequenceReady) {
+        for (int i = 0; i < SEQ_LENGTH; i++)
+          for (int j = 0; j < N_FEATURES; j++)
+            input->data.f[i * N_FEATURES + j] = inputBuffer[i][j];
+
+        if (interpreter->Invoke() != kTfLiteOk) {
+          Serial.println("Invoke failed!");
+          return;
+        }
+
+        int predictedClass = 0;
+        float maxProb = output->data.f[0];
+        for (int i = 1; i < output->dims->data[1]; i++) {
+          if (output->data.f[i] > maxProb) {
+            maxProb = output->data.f[i];
+            predictedClass = i;
+          }
+        }
+
+        const char* punchLabel = punchTypes[predictedClass];
+        String result = String(punchLabel) + ", Right";
+
+        Serial.println("Inference: " + result);
+        mqttClient.publish(topic_publish_punch, result.c_str());
+
+        sequenceReady = false;
+        inputIndex = 0;
       }
     #endif
   }
