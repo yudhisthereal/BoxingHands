@@ -6,10 +6,15 @@
 #include <WiFiClientSecure.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <EloquentTinyML.h>
+#include <TensorFlowLite_ESP32.h>
+
+#include "tensorflow/lite/micro/all_ops_resolver.h"
+#include "tensorflow/lite/micro/micro_error_reporter.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/schema/schema_generated.h"
 
 // Configuration macros
-#define USE_SERIAL 1
+#define USE_SERIAL 0
 #define USE_MQTT 1
 #define USE_DUMMY 0
 
@@ -20,16 +25,29 @@
 // Input Data
 #define SEQ_LENGTH 12
 #define N_FEATURES 6
+#define N_INPUTS (SEQ_LENGTH * N_FEATURES)
+#define STRIDE 1 // how often to classify
 
-#define N_INPUTS 72
 #define N_OUTPUTS 3
-#define TENSOR_ARENA_SIZE 15 * 1024
+#define TENSOR_ARENA_SIZE 24 * 1024
 
 float inputBuffer[SEQ_LENGTH][N_FEATURES] = {0};
 int inputIndex = 0;
+int sampleCount = 0;
+int strideCounter = 0;
 bool sequenceReady = false;
 
-Eloquent::TinyML::TfLite<N_INPUTS, N_OUTPUTS, TENSOR_ARENA_SIZE> ml;
+// Declare TFLite globals
+tflite::MicroInterpreter *interpreter;
+tflite::ErrorReporter *error_reporter;
+tflite::AllOpsResolver resolver;
+tflite::MicroErrorReporter micro_error_reporter;
+
+const tflite::Model *model = nullptr;
+TfLiteTensor *input = nullptr;
+TfLiteTensor *output = nullptr;
+
+uint8_t tensor_arena[TENSOR_ARENA_SIZE];
 
 // WiFi credentials
 const char *ssid = "Xiaomi Biru";
@@ -43,8 +61,8 @@ const char *mqtt_password = "Mango!River_42Sun";
 
 // MQTT topics
 const char *topic_publish_data = "boxing/raw_data_left"; // raw data
-const char *topic_publish_punch = "boxing/punch_type";    // classification results
-const char *topic_subscribe = "boxing/control";           // Optional: for receiving commands
+const char *topic_publish_punch = "boxing/punch_type";   // classification results
+const char *topic_subscribe = "boxing/control";          // Optional: for receiving commands
 
 // Moving Average Filter Configuration
 const int WINDOW_SIZE = 5;
@@ -78,8 +96,8 @@ const long interval = 50;
 
 unsigned long previousPunchMillis = 0;
 const long punchInterval = 150;
-const char *punchTypes[] = {"no_punch", "jab", "hook"};
-const int numPunchTypes = sizeof(punchTypes) / sizeof(punchTypes[0]);
+const char *punchTypes[] = {"HOOK", "JAB", "NO PUNCH"};
+// const int numPunchTypes = sizeof(punchTypes) / sizeof(punchTypes[0]);
 
 float applyMovingAverage(float newValue, float buffer[], bool &bufferFilled)
 {
@@ -150,15 +168,39 @@ void setupModel()
 {
   Serial.println("=== [Model Setup Start] ===");
 
-  ml.begin(boxing_model_tflite);
+  // Set up logging (optional but useful for debugging)
+  error_reporter = &micro_error_reporter;
+
+  // Load model
+  model = tflite::GetModel(boxing_model_tflite);
+  if (model->version() != TFLITE_SCHEMA_VERSION)
+  {
+    Serial.println("Model schema version mismatch!");
+    return;
+  }
+
+  // Set up resolver and interpreter
+  interpreter = new tflite::MicroInterpreter(model, resolver, tensor_arena, TENSOR_ARENA_SIZE, error_reporter);
+
+  // Allocate memory for tensors
+  TfLiteStatus allocate_status = interpreter->AllocateTensors();
+  if (allocate_status != kTfLiteOk)
+  {
+    Serial.println("AllocateTensors() failed");
+    return;
+  }
+
+  // Get pointers to input and output tensors
+  input = interpreter->input(0);
+  output = interpreter->output(0);
 
   Serial.println("=== [Model Setup Complete] ===");
 }
 
 void setup()
 {
-#if USE_SERIAL
   Serial.begin(115200);
+#if USE_SERIAL
   delay(1000);
   Serial.println("Initializing MPU6050...");
 #endif
@@ -191,9 +233,34 @@ void setup()
 
 #if USE_DUMMY
 #else
-  setupModel(); // <<< Penting!
+  setupModel();
 #endif
 }
+
+class BoxingModel
+{
+public:
+  void predict(float *input_data, float *output_data)
+  {
+    for (int i = 0; i < N_INPUTS; i++)
+    {
+      input->data.f[i] = input_data[i];
+    }
+
+    if (interpreter->Invoke() != kTfLiteOk)
+    {
+      Serial.println("Model invocation failed!");
+      return;
+    }
+
+    for (int i = 0; i < N_OUTPUTS; i++)
+    {
+      output_data[i] = output->data.f[i];
+    }
+  }
+};
+
+BoxingModel ml;
 
 void loop()
 {
@@ -226,18 +293,29 @@ void loop()
 
     mqttClient.publish(topic_publish_data, sensorData.c_str());
 
-    inputBuffer[inputIndex][0] = ax;
-    inputBuffer[inputIndex][1] = ay;
-    inputBuffer[inputIndex][2] = az;
-    inputBuffer[inputIndex][3] = gx;
-    inputBuffer[inputIndex][4] = gy;
-    inputBuffer[inputIndex][5] = gz;
+    // Shift buffer left by 1 to make room for new sample
+    for (int i = 0; i < SEQ_LENGTH - 1; i++)
+    {
+      for (int j = 0; j < N_FEATURES; j++)
+      {
+        inputBuffer[i][j] = inputBuffer[i + 1][j];
+      }
+    }
 
-    inputIndex++;
-    if (inputIndex >= SEQ_LENGTH)
+    inputBuffer[SEQ_LENGTH - 1][0] = ax;
+    inputBuffer[SEQ_LENGTH - 1][1] = ay;
+    inputBuffer[SEQ_LENGTH - 1][2] = az;
+    inputBuffer[SEQ_LENGTH - 1][3] = gx;
+    inputBuffer[SEQ_LENGTH - 1][4] = gy;
+    inputBuffer[SEQ_LENGTH - 1][5] = gz;
+
+    sampleCount++;
+    strideCounter++;
+
+    if (strideCounter >= STRIDE && sampleCount >= SEQ_LENGTH)
     {
       sequenceReady = true;
-      inputIndex = 0;
+      strideCounter = 0; // reset after every classification
     }
   }
 
@@ -246,6 +324,7 @@ void loop()
     previousPunchMillis = currentMillis;
 
 #if USE_DUMMY
+    inputIndex = (inputIndex + 1) % SEQ_LENGTH;
     // Calculate magnitude of acceleration
     float accelMagnitude = sqrt(
         inputBuffer[(inputIndex == 0 ? SEQ_LENGTH : inputIndex) - 1][0] * inputBuffer[(inputIndex == 0 ? SEQ_LENGTH : inputIndex) - 1][0] +
@@ -272,6 +351,8 @@ void loop()
     if (sequenceReady)
     {
       float flatInput[N_INPUTS];
+
+      // Fill flatInput from circular buffer
       for (int i = 0; i < SEQ_LENGTH; i++)
       {
         for (int j = 0; j < N_FEATURES; j++)
@@ -280,12 +361,13 @@ void loop()
         }
       }
 
-      float output[N_OUTPUTS];       // output buffer to hold probabilities
-      ml.predict(flatInput, output); // run inference and fill output[]
+      float output[N_OUTPUTS];
+      ml.predict(flatInput, output);
 
       int predictedClass = 0;
-      float maxProb = output[0];
-      for (int i = 1; i < N_OUTPUTS; i++)
+      float maxProb = output[predictedClass];
+
+      for (byte i = 1; i < 3; i++)
       {
         if (output[i] > maxProb)
         {
@@ -297,11 +379,14 @@ void loop()
       const char *punchLabel = punchTypes[predictedClass];
       String result = String(punchLabel) + ", Left";
 
-      Serial.println("Inference: " + result);
-      mqttClient.publish(topic_publish_punch, result.c_str());
+      // Serial.println("PREDICTED: " + result + " (" + String(output[predictedClass]) + ")");
+      Serial.println("PUNCH: " + String(punchLabel));
+      if (output[predictedClass] > 0.5)
+      {
+        mqttClient.publish(topic_publish_punch, result.c_str());
+      }
 
       sequenceReady = false;
-      inputIndex = 0;
     }
 #endif
   }
