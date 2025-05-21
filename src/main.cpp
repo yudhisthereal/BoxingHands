@@ -26,7 +26,7 @@
 #define SEQ_LENGTH 12
 #define N_FEATURES 6
 #define N_INPUTS (SEQ_LENGTH * N_FEATURES)
-#define STRIDE 1 // how often to classify
+#define STRIDE 2 // how often to classify
 
 #define N_OUTPUTS 3
 #define TENSOR_ARENA_SIZE 24 * 1024
@@ -97,6 +97,7 @@ const long interval = 50;
 unsigned long previousPunchMillis = 0;
 const long punchInterval = 150;
 const char *punchTypes[] = {"HOOK", "JAB", "NO PUNCH"};
+String lastPunchType = "";
 // const int numPunchTypes = sizeof(punchTypes) / sizeof(punchTypes[0]);
 
 float applyMovingAverage(float newValue, float buffer[], bool &bufferFilled)
@@ -352,7 +353,6 @@ void loop()
     {
       float flatInput[N_INPUTS];
 
-      // Fill flatInput from circular buffer
       for (int i = 0; i < SEQ_LENGTH; i++)
       {
         for (int j = 0; j < N_FEATURES; j++)
@@ -367,7 +367,7 @@ void loop()
       int predictedClass = 0;
       float maxProb = output[predictedClass];
 
-      for (byte i = 1; i < 3; i++)
+      for (byte i = 1; i < N_OUTPUTS; i++)
       {
         if (output[i] > maxProb)
         {
@@ -377,13 +377,25 @@ void loop()
       }
 
       const char *punchLabel = punchTypes[predictedClass];
-      String result = String(punchLabel) + ", Left";
+      String punchLabelStr = String(punchLabel);
+      String result = punchLabelStr + ", Left";
 
-      // Serial.println("PREDICTED: " + result + " (" + String(output[predictedClass]) + ")");
-      Serial.println("PUNCH: " + String(punchLabel));
-      if (output[predictedClass] > 0.5)
+      Serial.println("PUNCH: " + punchLabelStr);
+
+      // Only publish if confident and NOT "NO PUNCH"
+      if (punchLabelStr != "NO PUNCH")
       {
-        mqttClient.publish(topic_publish_punch, result.c_str());
+        if (punchLabelStr != lastPunchType)
+        {
+          mqttClient.publish(topic_publish_punch, result.c_str());
+          Serial.println("PUBLISHED " + punchLabelStr);
+        }
+      }
+
+      // Always update lastPunchType on confident prediction
+      if (maxProb > 0.5)
+      {
+        lastPunchType = punchLabelStr;
       }
 
       sequenceReady = false;
