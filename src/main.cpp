@@ -1,4 +1,15 @@
-#include "boxing_model_left.h"
+// Configuration macros
+#define LEFT 1
+#define RIGHT 0
+#define USE_SERIAL 0
+#define USE_MQTT 1
+#define USE_DUMMY 0
+
+#if LEFT
+#include "boxing_model_left_10.h"
+#elif RIGHT
+#include "boxing_model_right_8.h"
+#endif
 
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
@@ -13,23 +24,34 @@
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 
-// Configuration macros
-#define USE_SERIAL 0
-#define USE_MQTT 1
-#define USE_DUMMY 0
-
 // I2C Pins
 #define SDA_PIN 21
 #define SCL_PIN 22
 
 // Input Data
-#define SEQ_LENGTH 12
+#if LEFT
+#define SEQ_LENGTH 15
+#elif RIGHT
+#define SEQ_LENGTH 8
+#endif
+
 #define N_FEATURES 6
 #define N_INPUTS (SEQ_LENGTH * N_FEATURES)
-#define STRIDE 2 // how often to classify
+#define CLASSIFIER_COOLDOWN 20 // rest classifier for few timesteps after a classification other than NO PUNCH
+#define AFTERJAB_COOLDOWN 800 // in ms, to avoid false HOOK commonly classified by our model
+#define STRIDE 1              // how often to classify
+
+#define WINDOW_SIZE 5
 
 #define N_OUTPUTS 3
 #define TENSOR_ARENA_SIZE 24 * 1024
+#define MIN_CONFIDENCE 0.5
+
+#if RIGHT
+#define MIN_ACCEL_MAGNITUDE 20.0
+#elif LEFT
+#define MIN_ACCEL_MAGNITUDE 17.0
+#endif
 
 float inputBuffer[SEQ_LENGTH][N_FEATURES] = {0};
 int inputIndex = 0;
@@ -50,8 +72,10 @@ TfLiteTensor *output = nullptr;
 uint8_t tensor_arena[TENSOR_ARENA_SIZE];
 
 // WiFi credentials
-const char *ssid = "Xiaomi Biru";
-const char *password = "tH3od0rer8seve!+";
+// const char *ssid = "Xiaomi Biru";
+// const char *password = "tH3od0rer8seve!+";
+const char *ssid = "GEREJA AL-IKHLAS (UMI MARIA)";
+const char *password = "susugedhe";
 
 // MQTT Broker
 const char *mqtt_broker = "3e065ffaa6084b219bc6553c8659b067.s1.eu.hivemq.cloud";
@@ -60,12 +84,16 @@ const char *mqtt_username = "CapstoneUser";
 const char *mqtt_password = "Mango!River_42Sun";
 
 // MQTT topics
+#if LEFT
+const char *topic_publish_data = "boxing/raw_data_left"; // raw data
+#elif RIGHT
 const char *topic_publish_data = "boxing/raw_data_right"; // raw data
-const char *topic_publish_punch = "boxing/punch_type";   // classification results
-const char *topic_subscribe = "boxing/control";          // Optional: for receiving commands
+#endif
+
+const char *topic_publish_punch = "boxing/punch_type"; // classification results
+const char *topic_subscribe = "boxing/control";        // Optional: for receiving commands
 
 // Moving Average Filter Configuration
-const int WINDOW_SIZE = 5;
 float accelXBuffer[WINDOW_SIZE] = {0};
 float accelYBuffer[WINDOW_SIZE] = {0};
 float accelZBuffer[WINDOW_SIZE] = {0};
@@ -78,13 +106,21 @@ bool bufferFilled = false;
 // Dummy Punch
 int dummyPunchIndex = 0;
 
-// Bias (IMU KIRI)
+#if LEFT
 const float bias_ax = 1.073;
 const float bias_ay = -0.041;
 const float bias_az = 0.164;
 const float bias_gx = -0.107;
 const float bias_gy = -0.015;
 const float bias_gz = -0.020;
+#elif RIGHT
+const float bias_ax = 0.852;
+const float bias_ay = -0.335;
+const float bias_az = 0.376;
+const float bias_gx = -0.023;
+const float bias_gy = 0.002;
+const float bias_gz = -0.016;
+#endif
 
 WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
@@ -94,9 +130,18 @@ Adafruit_MPU6050 mpu;
 unsigned long previousMillis = 0;
 const long interval = 50;
 
+unsigned long lastJabTime = 0;
+int cooldownSamplesRemaining = 0;
+
 unsigned long previousPunchMillis = 0;
-const long punchInterval = 150;
-const char *punchTypes[] = {"STRAIGHT", "UPPERCUT", "NO PUNCH"};
+const long punchInterval = 50;
+
+#if LEFT
+const char *punchTypes[] = {"NO PUNCH", "JAB", "HOOK"};
+#elif RIGHT
+const char *punchTypes[] = {"NO PUNCH", "STRAIGHT", "UPPERCUT"};
+#endif
+
 String lastPunchType = "";
 // const int numPunchTypes = sizeof(punchTypes) / sizeof(punchTypes[0]);
 
@@ -172,8 +217,13 @@ void setupModel()
   // Set up logging (optional but useful for debugging)
   error_reporter = &micro_error_reporter;
 
-  // Load model
-  model = tflite::GetModel(boxing_model_tflite);
+// Load model
+#if RIGHT
+  model = tflite::GetModel(boxing_model_right_8_tflite);
+#elif LEFT
+  model = tflite::GetModel(boxing_model_left_10_tflite);
+#endif
+
   if (model->version() != TFLITE_SCHEMA_VERSION)
   {
     Serial.println("Model schema version mismatch!");
@@ -215,12 +265,19 @@ void setup()
       delay(10);
   }
 
+#if USE_SERIAL
+  Serial.println("MPU6050 initialized!");
+#endif
+
   mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
   mpu.setGyroRange(MPU6050_RANGE_500_DEG);
   mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
 
 #if USE_MQTT
   WiFi.begin(ssid, password);
+#if USE_SERIAL
+  Serial.println("connecting to Wi-Fi: " + String(ssid));
+#endif
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
@@ -265,9 +322,11 @@ BoxingModel ml;
 
 void loop()
 {
+#if USE_MQTT
   if (!mqttClient.connected())
     reconnect();
   mqttClient.loop();
+#endif
 
   unsigned long currentMillis = millis();
 
@@ -337,7 +396,7 @@ void loop()
     if (accelMagnitude > 17.0)
     {
       const char *dummyPunch = punchTypes[dummyPunchIndex];
-      dummyPunchIndex = (dummyPunchIndex + 1) % (numPunchTypes);
+      dummyPunchIndex = (dummyPunchIndex + 1) % (N_OUTPUTS);
       String result = String(dummyPunch) + ", Right";
       mqttClient.publish(topic_publish_punch, result.c_str());
       sentNoPunch = false;
@@ -351,55 +410,114 @@ void loop()
 #else
     if (sequenceReady)
     {
-      float flatInput[N_INPUTS];
-
-      for (int i = 0; i < SEQ_LENGTH; i++)
+      float accelMagnitude = 0.0;
+      if (cooldownSamplesRemaining > 0)
       {
-        for (int j = 0; j < N_FEATURES; j++)
+        cooldownSamplesRemaining--;
+      }
+      else
+      {
+        // --- Calculate the maximum acceleration magnitude over the entire inputBuffer
+        for (int i = 0; i < SEQ_LENGTH; i++)
         {
-          flatInput[i * N_FEATURES + j] = inputBuffer[i][j];
+          float ax = inputBuffer[i][0];
+          float ay = inputBuffer[i][1];
+          float az = inputBuffer[i][2];
+
+          float magnitude = sqrt(ax * ax + ay * ay + az * az);
+          if (magnitude > accelMagnitude)
+          {
+            accelMagnitude = magnitude;
+          }
         }
       }
 
-      float output[N_OUTPUTS];
-      ml.predict(flatInput, output);
-
-      int predictedClass = 0;
-      float maxProb = output[predictedClass];
-
-      for (byte i = 1; i < N_OUTPUTS; i++)
+      // Skip classification if below threshold
+      if (accelMagnitude < MIN_ACCEL_MAGNITUDE)
       {
-        if (output[i] > maxProb)
-        {
-          maxProb = output[i];
-          predictedClass = i;
-        }
+#if USE_SERIAL
+        Serial.println("Skipped classification due to low accel magnitude. (" + String(accelMagnitude) + ")");
+        lastPunchType = "NO PUNCH";
+#endif
       }
-
-      const char *punchLabel = punchTypes[predictedClass];
-      String punchLabelStr = String(punchLabel);
-      String result = punchLabelStr + ", Right";
-
-      Serial.println("PUNCH: " + punchLabelStr);
-
-      // Only publish if confident and NOT "NO PUNCH"
-      if (punchLabelStr != "NO PUNCH")
+      else
       {
-        if (punchLabelStr != lastPunchType)
+
+        float flatInput[N_INPUTS];
+        for (int i = 0; i < SEQ_LENGTH; i++)
         {
-          mqttClient.publish(topic_publish_punch, result.c_str());
-          Serial.println("PUBLISHED " + punchLabelStr);
+          for (int j = 0; j < N_FEATURES; j++)
+          {
+            flatInput[i * N_FEATURES + j] = inputBuffer[i][j];
+          }
         }
-      }
 
-      // Always update lastPunchType on confident prediction
-      if (maxProb > 0.5)
-      {
+        float output[N_OUTPUTS];
+
+        unsigned long startPred = millis();
+        ml.predict(flatInput, output);
+        unsigned long endPred = millis();
+        Serial.println("Predict time: " + String(endPred - startPred) + "ms");
+
+        int predictedClass = 0;
+        float maxProb = output[predictedClass];
+        for (byte i = 0; i < N_OUTPUTS; i++)
+        {
+          if (output[i] > maxProb)
+          {
+            maxProb = output[i];
+            predictedClass = i;
+          }
+#if USE_SERIAL
+          Serial.println(String(punchTypes[i]) + ": " + String(output[i]));
+#endif
+        }
+
+        const char *punchLabel = punchTypes[predictedClass];
+        String punchLabelStr = String(punchLabel);
+#if LEFT
+        String result = punchLabelStr + ", Left";
+#elif RIGHT
+        String result = punchLabelStr + ", Right";
+#endif
+#if USE_SERIAL
+        Serial.println("PUNCH: " + punchLabelStr);
+#endif
+        // Only publish if confident and NOT "NO PUNCH"
+        if (punchLabelStr != "NO PUNCH")
+        {
+          unsigned long now = millis();
+
+          bool blockHookAfterJab = (punchLabelStr == "HOOK") &&
+                                   (now - lastJabTime < AFTERJAB_COOLDOWN);
+
+          if ((!blockHookAfterJab || punchLabelStr != "HOOK") && punchLabelStr != lastPunchType && maxProb > MIN_CONFIDENCE)
+          {
+            mqttClient.publish(topic_publish_punch, result.c_str());
+#if USE_SERIAL
+            Serial.println("PUBLISHED " + punchLabelStr);
+#endif
+            if (punchLabelStr == "JAB")
+            {
+              lastJabTime = now;
+            }
+
+            cooldownSamplesRemaining = CLASSIFIER_COOLDOWN;
+          }
+          else if (maxProb <= MIN_CONFIDENCE)
+          {
+#if USE_SERIAL
+            Serial.println("Confidence: " + String(maxProb));
+#endif
+          }
+          else if (blockHookAfterJab)
+          {
+          }
+        }
+
         lastPunchType = punchLabelStr;
       }
-
-      sequenceReady = false;
-    }
 #endif
   }
+}
 }
