@@ -60,7 +60,7 @@ const char *mqtt_username = "CapstoneUser";
 const char *mqtt_password = "Mango!River_42Sun";
 
 // MQTT topics
-const char *topic_publish_data = "boxing/raw_data_left"; // raw data
+const char *topic_publish_data = "boxing/raw_data_right"; // raw data
 const char *topic_publish_punch = "boxing/punch_type";   // classification results
 const char *topic_subscribe = "boxing/control";          // Optional: for receiving commands
 
@@ -96,7 +96,7 @@ const long interval = 50;
 
 unsigned long previousPunchMillis = 0;
 const long punchInterval = 150;
-const char *punchTypes[] = {"HOOK", "JAB", "NO PUNCH"};
+const char *punchTypes[] = {"STRAIGHT", "UPPERCUT", "NO PUNCH"};
 String lastPunchType = "";
 // const int numPunchTypes = sizeof(punchTypes) / sizeof(punchTypes[0]);
 
@@ -378,7 +378,7 @@ void loop()
 
       const char *punchLabel = punchTypes[predictedClass];
       String punchLabelStr = String(punchLabel);
-      String result = punchLabelStr + ", Left";
+      String result = punchLabelStr + ", Right";
 
       Serial.println("PUNCH: " + punchLabelStr);
 
