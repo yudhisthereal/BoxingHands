@@ -1,6 +1,6 @@
 // Configuration macros
-#define LEFT 1
-#define RIGHT 0
+#define LEFT 0
+#define RIGHT 1
 #define USE_SERIAL 0
 #define USE_MQTT 1
 #define USE_DUMMY 0
@@ -11,6 +11,7 @@
 #include "boxing_model_right_8.h"
 #endif
 
+#include <mqtt_credentials.h>
 #include <wifi_credentials.h>
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
@@ -75,12 +76,6 @@ TfLiteTensor *input = nullptr;
 TfLiteTensor *output = nullptr;
 
 uint8_t tensor_arena[TENSOR_ARENA_SIZE];
-
-// MQTT Broker
-const char *mqtt_broker = "3e065ffaa6084b219bc6553c8659b067.s1.eu.hivemq.cloud";
-const int mqtt_port = 8883;
-const char *mqtt_username = "CapstoneUser";
-const char *mqtt_password = "Mango!River_42Sun";
 
 // MQTT topics
 #if LEFT
