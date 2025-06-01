@@ -78,14 +78,14 @@ git clone https://github.com/yudhisthereal/Capstone.git
 cd Capstone
 
 # Backend dependencies
-cd backend
+cd web-dashboard
 pip install -r requirements.txt
 
 # Start Flask server
 python app.py
 
 # Frontend (optional tweaks)
-cd ../frontend
+cd static
 # Make changes and serve statically if needed
 
 ...
@@ -107,10 +107,10 @@ cd ../frontend
 We thank everyone who helped shape this project!
 
 - [@Yudhistira](https://github.com/yudhisthereal) – system architecture, embedded AI, firmware, TFLM integration
-- [@shadamjverron](https://github.com/shadamjverron) – MQTT backend, Flask API, SQLite punch history
-- [@rafialutfi](https://github.com/rafialutfi) – dashboard UI, Tailwind + Chart.js/Plotly integration
-- [@fahmirobbani](https://github.com/fahmirobbani) – model training, evaluation, video editing
-- [@rifatfadlillah](https://github.com/rifatfadlillah) – hardware design, sensor wiring, ESP32 integration
+- [@shadamjverron](https://github.com/shadamjv) – MQTT backend, Flask API, SQLite punch history
+- [@rafialutfi]() – dashboard UI, Tailwind + Chart.js/Plotly integration
+- [@fahmirobbani]() – model training, evaluation, video editing
+- [@rifatfadlillah]() – hardware design, sensor wiring, ESP32 integration
 
 > Want to contribute? [Open an issue](https://github.com/yudhisthereal/Capstone/issues) or fork the project!
 
