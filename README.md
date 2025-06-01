@@ -1,4 +1,4 @@
-# 🥊 Boxing Classifier Wearable
+# 🥊 BoxingHands - A Boxing Classifier Wearable
 
 An AI-powered wearable system that classifies boxing punches in real time using sensor data, deep learning, and a responsive web dashboard. Built by a passionate multidisciplinary team to push the boundaries of smart fitness technology.
 
@@ -74,8 +74,8 @@ https://www.youtube.com/watch?v=YOUR_DEMO_LINK_HERE
 
 ```bash
 # Clone the repo
-git clone https://github.com/yudhisthereal/Capstone.git
-cd Capstone
+git clone https://github.com/yudhisthereal/BoxingHands.git
+cd BoxingHands
 
 # Backend dependencies
 cd web-dashboard
@@ -112,6 +112,6 @@ We thank everyone who helped shape this project!
 - [@fahmirobbani]() – model training, evaluation, video editing
 - [@rifatfadlillah]() – hardware design, sensor wiring, ESP32 integration
 
-> Want to contribute? [Open an issue](https://github.com/yudhisthereal/Capstone/issues) or fork the project!
+> Want to contribute? [Open an issue](https://github.com/yudhisthereal/BoxingHands/issues) or fork the project!
 
 ...
