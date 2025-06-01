@@ -6,11 +6,12 @@
 #define USE_DUMMY 0
 
 #if LEFT
-#include "boxing_model_left_10.h"
+#include "boxing_model_left_8.h"
 #elif RIGHT
 #include "boxing_model_right_8.h"
 #endif
 
+#include <wifi_credentials.h>
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
@@ -30,18 +31,22 @@
 
 // Input Data
 #if LEFT
-#define SEQ_LENGTH 15
+#define SEQ_LENGTH 8
 #elif RIGHT
 #define SEQ_LENGTH 8
 #endif
 
 #define N_FEATURES 6
 #define N_INPUTS (SEQ_LENGTH * N_FEATURES)
-#define CLASSIFIER_COOLDOWN 20 // rest classifier for few timesteps after a classification other than NO PUNCH
-#define AFTERJAB_COOLDOWN 800 // in ms, to avoid false HOOK commonly classified by our model
-#define STRIDE 1              // how often to classify
+#define CLASSIFIER_COOLDOWN 13 // rest classifier for few timesteps after a classification other than NO PUNCH
+#define AFTERJAB_COOLDOWN 500  // in ms, to avoid false HOOK commonly classified by our model
+#define STRIDE 1               // how often to classify
 
+#if RIGHT
 #define WINDOW_SIZE 5
+#elif LEFT
+#define WINDOW_SIZE 5
+#endif
 
 #define N_OUTPUTS 3
 #define TENSOR_ARENA_SIZE 24 * 1024
@@ -50,7 +55,7 @@
 #if RIGHT
 #define MIN_ACCEL_MAGNITUDE 20.0
 #elif LEFT
-#define MIN_ACCEL_MAGNITUDE 17.0
+#define MIN_ACCEL_MAGNITUDE 16.0
 #endif
 
 float inputBuffer[SEQ_LENGTH][N_FEATURES] = {0};
@@ -70,12 +75,6 @@ TfLiteTensor *input = nullptr;
 TfLiteTensor *output = nullptr;
 
 uint8_t tensor_arena[TENSOR_ARENA_SIZE];
-
-// WiFi credentials
-// const char *ssid = "Xiaomi Biru";
-// const char *password = "tH3od0rer8seve!+";
-const char *ssid = "GEREJA AL-IKHLAS (UMI MARIA)";
-const char *password = "susugedhe";
 
 // MQTT Broker
 const char *mqtt_broker = "3e065ffaa6084b219bc6553c8659b067.s1.eu.hivemq.cloud";
@@ -221,7 +220,7 @@ void setupModel()
 #if RIGHT
   model = tflite::GetModel(boxing_model_right_8_tflite);
 #elif LEFT
-  model = tflite::GetModel(boxing_model_left_10_tflite);
+  model = tflite::GetModel(boxing_model_left_8_tflite);
 #endif
 
   if (model->version() != TFLITE_SCHEMA_VERSION)
@@ -491,7 +490,7 @@ void loop()
           bool blockHookAfterJab = (punchLabelStr == "HOOK") &&
                                    (now - lastJabTime < AFTERJAB_COOLDOWN);
 
-          if ((!blockHookAfterJab || punchLabelStr != "HOOK") && punchLabelStr != lastPunchType && maxProb > MIN_CONFIDENCE)
+          if ((!blockHookAfterJab || punchLabelStr != "HOOK") && maxProb > MIN_CONFIDENCE)
           {
             mqttClient.publish(topic_publish_punch, result.c_str());
 #if USE_SERIAL
