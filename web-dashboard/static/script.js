@@ -7,6 +7,13 @@ let lastDeviceId = "";
 let punchSequence = [];
 let comboTimeout = null;
 
+// Initialize orientation
+const imu_orientation = {
+  left: { roll: 0, pitch: 0, yaw: 0 },
+  right: { roll: 0, pitch: 0, yaw: 0 },
+};
+
+
 const toggleBacksound = document.getElementById("toggle-backsound");
 const toggleSFX = document.getElementById("toggle-sfx");
 
@@ -367,89 +374,64 @@ function initialize3DPlot(id) {
   );
 }
 
-
-// Matriks rotasi untuk transformasi data sensor
-function rotateVector(vector, angle, axis) {
-  const cosA = Math.cos(angle);
-  const sinA = Math.sin(angle);
-
-  const rotationMatrix = {
-    x: [
-      [1, 0, 0],
-      [0, cosA, -sinA],
-      [0, sinA, cosA],
-    ],
-    y: [
-      [cosA, 0, sinA],
-      [0, 1, 0],
-      [-sinA, 0, cosA],
-    ],
-    z: [
-      [cosA, -sinA, 0],
-      [sinA, cosA, 0],
-      [0, 0, 1],
-    ],
-  };
-
-  const matrix = rotationMatrix[axis]; // Pilih sumbu rotasi (x, y, z)
-
-  // Lakukan perkalian matriks antara vektor data dan matriks rotasi
-  const rotatedVector = [
-    matrix[0][0] * vector[0] +
-      matrix[0][1] * vector[1] +
-      matrix[0][2] * vector[2],
-    matrix[1][0] * vector[0] +
-      matrix[1][1] * vector[1] +
-      matrix[1][2] * vector[2],
-    matrix[2][0] * vector[0] +
-      matrix[2][1] * vector[1] +
-      matrix[2][2] * vector[2],
-  ];
-
-  return rotatedVector;
+function updateOrientation(side, gyro, dt = 0.016) {
+  const ori = imu_orientation[side];
+  ori.roll += gyro[0] * dt;
+  ori.pitch += gyro[1] * dt;
+  ori.yaw += gyro[2] * dt;
 }
 
-// Fungsi untuk menyesuaikan data akselerometer dan giroskop berdasarkan orientasi sensor
-function adjustSensorData(accelData, gyroData, orientation) {
-  let rotatedAccel = accelData;
-  let rotatedGyro = gyroData;
+function rotateAccelToGlobal(accel, ori) {
+  const toRad = (deg) => deg * (Math.PI / 180);
 
-  // Misalnya, jika orientasi sensor diubah (ke atas atau ke bawah), lakukan rotasi
-  if (orientation === "up") {
-    rotatedAccel = rotateVector(accelData, Math.PI / 2, "x"); // Rotasi 90 derajat di sumbu X
-    rotatedGyro = rotateVector(gyroData, Math.PI / 2, "x"); // Rotasi 90 derajat di sumbu X
-  } else if (orientation === "down") {
-    rotatedAccel = rotateVector(accelData, -Math.PI / 2, "x"); // Rotasi -90 derajat di sumbu X
-    rotatedGyro = rotateVector(gyroData, -Math.PI / 2, "x"); // Rotasi -90 derajat di sumbu X
-  }
-  // Tambahkan orientasi lainnya jika perlu
+  const roll = toRad(ori.roll);
+  const pitch = toRad(ori.pitch);
+  const yaw = toRad(ori.yaw);
 
-  return {
-    accel: rotatedAccel,
-    gyro: rotatedGyro,
-  };
+  // Build rotation matrix (Yaw-Pitch-Roll order)
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const cr = Math.cos(roll), sr = Math.sin(roll);
+
+  const R = [
+    [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+    [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+    [-sp,     cp * sr,                cp * cr],
+  ];
+
+  const [ax, ay, az] = accel;
+
+  const gx = R[0][0] * ax + R[0][1] * ay + R[0][2] * az;
+  const gy = R[1][0] * ax + R[1][1] * ay + R[1][2] * az;
+  const gz = R[2][0] * ax + R[2][1] * ay + R[2][2] * az;
+
+  return [gx, gy, gz];
 }
 
 // Fungsi untuk memperbarui plot 3D dengan data akselerometer baru
 function updateAccel3D(side, data) {
   const plotId = `${side}Accel3D`;
-  if (!data || !data.accel || data.accel.length !== 3) return;
+  if (!data || !data.accel || !data.gyro) return;
 
-  const x = side === "left" ? -data.accel[0] : data.accel[0];
-  const y = data.accel[1];
-  const z = data.accel[2];
+  // Step 1: Update orientation
+  updateOrientation(side, data.gyro); // assumes ~16ms per update
 
+  // Step 2: Rotate accel vector to global frame
+  let accelGlobal = rotateAccelToGlobal(data.accel, imu_orientation[side]);
+
+  // Step 3: Append to plot
   Plotly.extendTraces(
     plotId,
     {
-      x: [[x]],
-      y: [[y]],
-      z: [[z]],
+      x: [[accelGlobal[0]]],
+      y: [[accelGlobal[1]]],
+      z: [[accelGlobal[2]]],
     },
     [0],
-    10 // max 10 points kept
+    10
   );
 }
+
 
 
 // Fungsi untuk mengambil data accelerometer dari server
