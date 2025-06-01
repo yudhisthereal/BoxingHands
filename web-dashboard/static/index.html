@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="light">
 
 <head>
   <meta charset="UTF-8" />
@@ -7,32 +7,55 @@
   <title>BoxingHands</title>
   <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class', // ← Ini sangat penting
+      theme: {
+        extend: {},
+      },
+    };
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="icon" href="/static/icon/boxing-gloves.png">
+  <style>
+    html {
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+  </style>
+
 </head>
 
-<body class="bg-gradient-to-b from-gray-100 to-white text-gray-800 p-6 relative font-sans min-h-screen">
-  
+<body
+  class="bg-gradient-to-b from-gray-100 to-white dark:from-gray-900 dark:to-gray-800 text-gray-800 dark:text-gray-100 p-6 relative font-sans min-h-screen">
+
   <!-- Tombol ON/OFF Sound -->
-  <div id="sound-controls" class="absolute top-4 left-4 space-y-4">
+  <div id="controls" class="absolute top-4 left-4 space-y-4">
     <!-- Switch Backsound -->
     <div class="flex items-center justify-between space-x-4">
       <label class="relative inline-flex items-center cursor-pointer">
         <input type="checkbox" id="toggle-backsound" class="sr-only peer" checked>
-        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all"></div>
-        <div class="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-5"></div>
+        <div
+          class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all">
+        </div>
+        <div
+          class="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-5">
+        </div>
       </label>
-      <span class="text-sm font-medium text-gray-700">Backsound</span>
+      <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Backsound</span>
     </div>
-  
+
     <!-- Switch Sound Effect -->
     <div class="flex items-center justify-between space-x-4">
       <label class="relative inline-flex items-center cursor-pointer">
         <input type="checkbox" id="toggle-sfx" class="sr-only peer" checked>
-        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all"></div>
-        <div class="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-5"></div>
+        <div
+          class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all">
+        </div>
+        <div
+          class="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-5">
+        </div>
       </label>
-      <span class="text-sm font-medium text-gray-700">Sound Effect</span>
+      <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Sound Effect</span>
     </div>
 
     <!-- Switch Grafik / Visual 3D -->
@@ -40,43 +63,53 @@
       <label class="relative inline-flex items-center cursor-pointer">
         <input type="checkbox" id="graphToggle" class="sr-only peer" />
         <div
-          class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all"
-        ></div>
-        <div
-          class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-5"
-        ></div>
+          class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all">
+        </div>
+        <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-5"></div>
       </label>
-      <span id="graphToggleLabel" class="text-sm font-medium text-gray-700"
-        >Visual 3D</span
-      >
+      <span id="graphToggleLabel" class="text-sm font-medium text-gray-700 dark:text-gray-300">Visual 3D</span>
     </div>
   </div>
-  
+
   <!-- Tombol ON/OFF dan indikator status -->
-  <div class="absolute top-4 right-4 text-right">    
+  <div class="absolute top-4 right-4 text-right">
     <button id="toggleButton"
-    class="px-6 py-2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold shadow-lg hover:from-indigo-500 hover:to-blue-600 transition duration-300 transform hover:scale-105">
-    <span>Mulai Latihan</span>
+      class="px-6 py-2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold shadow-lg hover:from-indigo-500 hover:to-blue-600 dark:hover:from-indigo-400 dark:hover:to-blue-500 transition duration-300 transform hover:scale-105">
+      <span>Mulai Latihan</span>
     </button>
-    
+
     <!-- Debugging function 
       <button onclick="playRandomSound()"> Tes Demo Audio </button> -->
-    <div id="statusIndicator" class="mt-2 text-sm font-semibold text-gray-600">
+    <div id="statusIndicator" class="mt-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
       Status: <span class="inline-block w-2 h-2 rounded-full bg-gray-400 mr-1 align-middle"></span><span
         id="statusText">OFF</span>
     </div>
+
+    <!-- Toggle Dark Mode -->
+    <!-- <div class="flex items-center justify-between space-x-4">
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" id="toggle-darkmode" class="sr-only peer">
+        <div
+          class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all">
+        </div>
+        <div
+          class="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-5">
+        </div>
+      </label>
+      <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Dark Mode</span>
+    </div> -->
   </div>
 
   <!-- Judul dan Subjudul -->
   <div class="text-center mb-6">
     <h1 class="text-4xl font-extrabold text-blue-700">BoxingHands</h1>
-    <p class="text-lg text-gray-600 mt-1">Capstone Project K2A - Team 2</p>
+    <p class="text-lg text-gray-600 mt-1 dark:text-gray-300">Capstone Project K2A - Team 2</p>
 
     <!-- Kotak Aktivitas -->
     <div class="mt-6 flex justify-center">
       <div id="punchBox"
-        class="flex justify-center gap-4 items-center bg-white rounded-2xl shadow-xl px-6 py-5 text-2xl font-bold text-center border-4 border-blue-600 min-h-[3.5rem] w-full max-w-lg mx-auto">
-        <span class="text-gray-400 italic">Tidak Ada Aktivitas</span>
+        class="flex justify-center gap-4 items-center bg-white dark:bg-gray-900 text-gray-400 dark:text-gray-500 border-blue-600 dark:border-blue-400 rounded-2xl shadow-xl px-6 py-5 text-2xl font-bold text-center border-4 min-h-[3.5rem] w-full max-w-lg mx-auto">
+        <span class="text-gray-400 dark:text-gray-300 italic">Tidak Ada Aktivitas</span>
       </div>
     </div>
   </div>
@@ -94,16 +127,18 @@
   <div class="w-full max-w-6xl mx-auto transition-all">
     <!-- Chart View -->
     <div id="chart-tab" class="grid grid-cols-1 md:grid-cols-2 gap-2">
-      
-      <div class="bg-white bg-opacity-10 backdrop-blur-md border border-gray-300 rounded-xl p-2 shadow-md">
+
+      <div
+        class="bg-white dark:bg-gray-800 bg-opacity-10 dark:bg-opacity-20 backdrop-blur-md border border-gray-300 dark:border-gray-600 rounded-xl p-2 shadow-md">
         <h2 class="text-xl font-bold text-center text-blue-700 mb-1">Left Arm</h2>
         <h3 class="text-xs text-center mb-1">Accelerometer</h3>
         <canvas id="accelLeftChart" class="h-[100px] w-full"></canvas>
         <h3 class="text-xs text-center mt-1 mb-1">Gyroscope</h3>
         <canvas id="gyroLeftChart" class="h-[100px] w-full"></canvas>
       </div>
-  
-      <div class="bg-white bg-opacity-10 backdrop-blur-md border border-gray-300 rounded-xl p-2 shadow-md">
+
+      <div
+        class="bg-white dark:bg-gray-800 bg-opacity-10 dark:bg-opacity-20 backdrop-blur-md border border-gray-300 dark:border-gray-600 rounded-xl p-2 shadow-md">
         <h2 class="text-xl font-bold text-center text-blue-700 mb-1">Right Arm</h2>
         <h3 class="text-xs text-center mb-1">Accelerometer</h3>
         <canvas id="accelRightChart" class="h-[100px] w-full"></canvas>
@@ -115,51 +150,52 @@
 
   <!-- 3D View -->
   <div id="visual-tab" class="grid grid-cols-1 md:grid-cols-2 gap-6 hidden">
-    <div class="bg-white bg-opacity-10 backdrop-blur-md border border-gray-300 rounded-xl p-6 shadow-xl">
+    <div
+      class="bg-white dark:bg-gray-800 bg-opacity-10 dark:bg-opacity-20 backdrop-blur-md border border-gray-300 dark:border-gray-600 rounded-xl p-6 shadow-xl">
       <h2 class="text-xl font-bold text-center text-blue-700 mb-1.5"> Left Arm</h2>
       <div id="leftAccel3D" class="h-[400px] w-full"></div>
     </div>
     <div
-      class="bg-white bg-opacity-10 backdrop-blur-md border border-gray-300 rounded-xl p-6 shadow-xl"
-    >
+      class="bg-white dark:bg-gray-800 bg-opacity-10 dark:bg-opacity-20 backdrop-blur-md border border-gray-300 dark:border-gray-600 rounded-xl p-6 shadow-xl">
       <h2 class="text-xl font-bold text-center text-blue-700 mb-1.5">Right Arm</h2>
       <div id="rightAccel3D" class="h-[400px] w-full"></div>
     </div>
   </div>
-</div>
-
-<!-- Tabel Log Aktivitas -->
-<div class="bg-white mt-12 p-6 rounded-2xl shadow-lg relative">
-  <!-- Header dengan tombol download -->
-  <div class="relative mb-6">
-    <!-- Judul di tengah -->
-    <h2 class="text-xl font-bold text-blue-700 text-center">Riwayat Aktivitas</h2>
-    <!-- Tombol di kanan atas -->
-    <a href="/download_csv" class="absolute right-0 top-0 text-sm bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">
-      Download CSV
-    </a>
   </div>
 
-  <div class="overflow-x-auto">
-    <table class="min-w-full text-left text-sm border">
-      <thead class="bg-blue-100 font-semibold text-blue-700">
-        <tr>
-          <th class="py-2 px-4 border">Waktu</th>
-          <th class="py-2 px-4 border">Perangkat</th>
-          <th class="py-2 px-4 border">Jenis Aktivitas</th>
-        </tr>
-      </thead>
-      <tbody id="punchLogTable" class="bg-white">
-        <tr>
-          <td class="px-4 py-2 italic text-gray-400" colspan="3">Belum ada data...</td>
-        </tr>
-      </tbody>
-    </table>
+  <!-- Tabel Log Aktivitas -->
+  <div class="bg-white dark:bg-gray-900 mt-12 p-6 rounded-2xl shadow-lg relative">
+    <!-- Header dengan tombol download -->
+    <div class="relative mb-6">
+      <!-- Judul di tengah -->
+      <h2 class="text-xl font-bold text-blue-700 text-center">Riwayat Aktivitas</h2>
+      <!-- Tombol di kanan atas -->
+      <a href="/download_csv"
+        class="absolute right-0 top-0 text-sm bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">
+        Download CSV
+      </a>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-left text-sm border">
+        <thead class="bg-blue-100 dark:bg-blue-900 font-semibold text-blue-700 dark:text-blue-300">
+          <tr>
+            <th class="py-2 px-4 border">Waktu</th>
+            <th class="py-2 px-4 border">Perangkat</th>
+            <th class="py-2 px-4 border">Jenis Aktivitas</th>
+          </tr>
+        </thead>
+        <tbody id="punchLogTable" class="bg-white dark:bg-gray-800">
+          <tr>
+            <td class="px-4 py-2 italic text-gray-400" colspan="3">Belum ada data...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
 
   <!-- Footer -->
-  <footer class="mt-12 text-center text-sm text-gray-500">
+  <footer class="mt-12 text-center text-sm text-gray-500 dark:text-gray-400">
     &copy; 2025 Capstone K2A - Team 2.
   </footer>
 
@@ -167,4 +203,5 @@
   <script src="static/script.js"></script>
 
 </body>
+
 </html>

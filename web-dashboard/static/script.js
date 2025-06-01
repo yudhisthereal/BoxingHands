@@ -50,6 +50,44 @@ document.getElementById("graphToggle").addEventListener("change", function () {
   }
 });
 
+// Dark mode functionality
+const darkToggle = document.getElementById("toggle-darkmode");
+const root = document.documentElement;
+
+console.log("Dark toggle element:", darkToggle);
+
+// Load saved theme or default to light
+const savedTheme = localStorage.getItem("theme");
+console.log("Saved theme from localStorage:", savedTheme);
+
+if (savedTheme === "dark") {
+  console.log("Applying dark mode from saved theme.");
+  root.classList.add("dark");
+  if (darkToggle) darkToggle.checked = true;
+} else {
+  console.log("Applying light mode from saved theme or default.");
+  root.classList.remove("dark");
+  if (darkToggle) darkToggle.checked = false;
+}
+
+// On toggle click
+if (darkToggle) {
+  darkToggle.addEventListener("change", () => {
+    if (darkToggle.checked) {
+      console.log("Toggle switched to dark mode.");
+      root.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      console.log("Toggle switched to light mode.");
+      root.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  });
+} else {
+  console.warn("Toggle element not found!");
+}
+
+
 const charts = {
   leftaccel: createChart("accelLeftChart", "red", "green", "blue", -50, 50),
   leftgyro: createChart("gyroLeftChart", "orange", "purple", "cyan", -10, 10),
@@ -307,9 +345,8 @@ toggleButton.addEventListener("click", async () => {
   toggleButton.classList.toggle("bg-gray-400", !isRunning);
 
   statusText.textContent = isRunning ? "ON" : "OFF";
-  statusDot.className = `inline-block w-2 h-2 rounded-full mr-1 align-middle ${
-    isRunning ? "bg-green-500" : "bg-gray-400"
-  }`;
+  statusDot.className = `inline-block w-2 h-2 rounded-full mr-1 align-middle ${isRunning ? "bg-green-500" : "bg-gray-400"
+    }`;
 });
 
 document.getElementById("toggle-backsound").addEventListener("change", (e) => {
@@ -396,7 +433,7 @@ function rotateAccelToGlobal(accel, ori) {
   const R = [
     [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
     [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
-    [-sp,     cp * sr,                cp * cr],
+    [-sp, cp * sr, cp * cr],
   ];
 
   const [ax, ay, az] = accel;
@@ -442,8 +479,8 @@ async function fetchAccelData() {
     const responseRight = await fetch("/data/right");
     const dataRight = await responseRight.json();
 
-    console.log("Data imu kiri:", dataLeft);
-    console.log("Data imu kanan:", dataRight);
+    // console.log("Data imu kiri:", dataLeft);
+    // console.log("Data imu kanan:", dataRight);
 
     // Pastikan data valid sebelum update grafik 3D
     if (isRunning && dataLeft.accel && dataRight.accel) {
