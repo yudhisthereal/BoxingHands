@@ -1,6 +1,6 @@
 // Configuration macros
-#define LEFT 0
-#define RIGHT 1
+#define LEFT 1
+#define RIGHT 0
 #define USE_SERIAL 0
 #define USE_MQTT 1
 #define USE_DUMMY 0
@@ -328,8 +328,8 @@ void loop()
   {
     previousMillis = currentMillis;
 
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
+    sensors_event_t a, g;
+    mpu.getEvent(&a, &g, nullptr);
 
     float ax = applyMovingAverage(a.acceleration.x, accelXBuffer, bufferFilled) + bias_ax;
     float ay = applyMovingAverage(a.acceleration.y, accelYBuffer, bufferFilled) + bias_ay;
