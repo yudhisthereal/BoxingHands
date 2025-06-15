@@ -1,43 +1,46 @@
-let isRunning = false;
-let lastPunchTimestamp = 0;
-const punchTimeout = 2000;
-let punchHistory = [];
-let lastPunchType = "";
-let lastDeviceId = "";
-let punchSequence = [];
-let comboTimeout = null;
+// Inisialisasi variabel global untuk status sistem, pukulan terakhir, dan urutan pukulan
+let isRunning = false; // Menyimpan status apakah sistem sedang berjalan
+let lastPunchTimestamp = 0; // Timestamp pukulan terakhir yang terdeteksi
+const punchTimeout = 2000; // Timeout (dalam milidetik) untuk reset urutan pukulan setelah waktu tertentu
+let punchHistory = []; // Menyimpan riwayat pukulan
+let lastPunchType = ""; // Menyimpan jenis pukulan terakhir
+let lastDeviceId = ""; // Menyimpan ID perangkat terakhir yang digunakan
+let punchSequence = []; // Menyimpan urutan pukulan yang dilakukan
+let comboTimeout = null; // Timeout untuk mereset combo pukulan
 
-// Initialize orientation
+// Inisialisasi orientasi sensor untuk kiri dan kanan (roll, pitch, yaw)
 const imu_orientation = {
-  left: { roll: 0, pitch: 0, yaw: 0 },
-  right: { roll: 0, pitch: 0, yaw: 0 },
+  left: { roll: 0, pitch: 0, yaw: 0 }, // Orientasi sensor kiri
+  right: { roll: 0, pitch: 0, yaw: 0 }, // Orientasi sensor kanan
 };
 
+// Referensi ke elemen kontrol untuk mengaktifkan musik latar dan efek suara
+const toggleBacksound = document.getElementById("toggle-backsound"); // Kontrol musik latar
+const toggleSFX = document.getElementById("toggle-sfx"); // Kontrol efek suara
+const backgroundMusic = document.getElementById("backgroundMusic"); // Elemen audio untuk musik latar
 
-const toggleBacksound = document.getElementById("toggle-backsound");
-const toggleSFX = document.getElementById("toggle-sfx");
+let isSFXEnabled = true; // Menyimpan status apakah efek suara diaktifkan
+let isBacksoundEnabled = true; // Menyimpan status apakah musik latar diaktifkan
 
-const backgroundMusic = document.getElementById("backgroundMusic");
-let isSFXEnabled = true;
-let isBacksoundEnabled = true;
-
+// Menyimpan data akselerometer 3D untuk kiri dan kanan (x, y, z)
 const accel3DHistory = {
   left: { x: [], y: [], z: [] },
   right: { x: [], y: [], z: [] },
 };
 
-// Auto toggle label & tab
+// Event listener untuk men-toggle grafik antara tampilan visual 3D dan grafik biasa
 document.getElementById("graphToggle").addEventListener("change", function () {
-  const isChecked = this.checked;
+  const isChecked = this.checked; // Mengecek apakah checkbox sudah dicentang
   const label = document.getElementById("graphToggleLabel");
   const chartTab = document.getElementById("chart-tab");
   const visualTab = document.getElementById("visual-tab");
 
   if (isChecked) {
-    label.textContent = "Visual 3D";
-    chartTab.classList.add("hidden");
-    visualTab.classList.remove("hidden");
+    label.textContent = "Visual 3D"; // Ubah label menjadi "Visual 3D"
+    chartTab.classList.add("hidden"); // Sembunyikan tab grafik biasa
+    visualTab.classList.remove("hidden"); // Tampilkan tab visual 3D
 
+    // Jika visual tab belum diinisialisasi, inisialisasi plot 3D
     if (!window.visualTabInitialized) {
       initialize3DPlot("leftAccel3D");
       initialize3DPlot("rightAccel3D");
@@ -45,62 +48,56 @@ document.getElementById("graphToggle").addEventListener("change", function () {
     }
   } else {
     label.textContent = "Visual 3D";
-    chartTab.classList.remove("hidden");
-    visualTab.classList.add("hidden");
+    chartTab.classList.remove("hidden"); // Tampilkan tab grafik biasa
+    visualTab.classList.add("hidden"); // Sembunyikan tab visual 3D
   }
 });
 
-// Dark mode functionality
+// Fungsi untuk menangani mode gelap/terang
 const darkToggle = document.getElementById("toggle-darkmode");
 const root = document.documentElement;
 
-console.log("Dark toggle element:", darkToggle);
-
-// Load saved theme or default to light
+// Memeriksa dan memuat tema yang disimpan di localStorage
 const savedTheme = localStorage.getItem("theme");
-console.log("Saved theme from localStorage:", savedTheme);
 
 if (savedTheme === "dark") {
-  console.log("Applying dark mode from saved theme.");
-  root.classList.add("dark");
-  if (darkToggle) darkToggle.checked = true;
+  root.classList.add("dark"); // Terapkan tema gelap
+  if (darkToggle) darkToggle.checked = true; // Set checkbox untuk mode gelap aktif
 } else {
-  console.log("Applying light mode from saved theme or default.");
-  root.classList.remove("dark");
-  if (darkToggle) darkToggle.checked = false;
+  root.classList.remove("dark"); // Terapkan tema terang
+  if (darkToggle) darkToggle.checked = false; // Set checkbox untuk mode terang aktif
 }
 
-// On toggle click
+// Event listener untuk mengubah mode gelap/terang saat toggle diklik
 if (darkToggle) {
   darkToggle.addEventListener("change", () => {
     if (darkToggle.checked) {
-      console.log("Toggle switched to dark mode.");
-      root.classList.add("dark");
-      localStorage.setItem("theme", "dark");
+      root.classList.add("dark"); // Terapkan tema gelap
+      localStorage.setItem("theme", "dark"); // Simpan preferensi tema gelap
     } else {
-      console.log("Toggle switched to light mode.");
-      root.classList.remove("dark");
-      localStorage.setItem("theme", "light");
+      root.classList.remove("dark"); // Terapkan tema terang
+      localStorage.setItem("theme", "light"); // Simpan preferensi tema terang
     }
   });
 } else {
-  console.warn("Toggle element not found!");
+  console.warn("Toggle element not found!"); // Peringatan jika elemen tidak ditemukan
 }
 
-
+// Fungsi untuk membuat grafik
 const charts = {
-  leftaccel: createChart("accelLeftChart", "red", "green", "blue", -50, 50),
-  leftgyro: createChart("gyroLeftChart", "orange", "purple", "cyan", -10, 10),
-  rightaccel: createChart("accelRightChart", "red", "green", "blue", -50, 50),
-  rightgyro: createChart("gyroRightChart", "orange", "purple", "cyan", -10, 10),
+  leftaccel: createChart("accelLeftChart", "red", "green", "blue", -50, 50), // Grafik akselerometer kiri
+  leftgyro: createChart("gyroLeftChart", "orange", "purple", "cyan", -10, 10), // Grafik giroskop kiri
+  rightaccel: createChart("accelRightChart", "red", "green", "blue", -50, 50), // Grafik akselerometer kanan
+  rightgyro: createChart("gyroRightChart", "orange", "purple", "cyan", -10, 10), // Grafik giroskop kanan
 };
 
+// Fungsi untuk membuat grafik dengan pengaturan warna dan rentang sumbu Y
 function createChart(canvasId, colorX, colorY, colorZ, yMin, yMax) {
-  const ctx = document.getElementById(canvasId).getContext("2d");
+  const ctx = document.getElementById(canvasId).getContext("2d"); // Mendapatkan konteks canvas
   const chart = new Chart(ctx, {
-    type: "line",
+    type: "line", // Grafik tipe garis
     data: {
-      labels: [],
+      labels: [], // Label waktu untuk sumbu X
       datasets: [
         { label: "X", data: [], borderColor: colorX, fill: false },
         { label: "Y", data: [], borderColor: colorY, fill: false },
@@ -108,37 +105,38 @@ function createChart(canvasId, colorX, colorY, colorZ, yMin, yMax) {
       ],
     },
     options: {
-      responsive: true,
-      animation: false,
+      responsive: true, // Membuat grafik responsif
+      animation: false, // Menonaktifkan animasi
       scales: {
         y: {
-          min: yMin,
-          max: yMax,
-          ticks: { stepSize: (yMax - yMin) / 10 },
+          min: yMin, // Nilai minimum pada sumbu Y
+          max: yMax, // Nilai maksimum pada sumbu Y
+          ticks: { stepSize: (yMax - yMin) / 10 }, // Menentukan jarak antara ticks di sumbu Y
         },
       },
     },
   });
-  chart.originalColors = [colorX, colorY, colorZ];
-  return chart;
+  chart.originalColors = [colorX, colorY, colorZ]; // Menyimpan warna asli untuk referensi
+  return chart; // Mengembalikan objek grafik
 }
 
 function updateCharts(chart, accelOrGyro, data) {
-  const timestamp = new Date().toLocaleTimeString();
-  chart.data.labels.push(timestamp);
+  const timestamp = new Date().toLocaleTimeString(); // Mendapatkan waktu saat ini
+  chart.data.labels.push(timestamp); // Menambahkan label waktu pada grafik
   if (chart.data.labels.length > 20) {
-    chart.data.labels.shift();
-    chart.data.datasets.forEach((ds) => ds.data.shift());
+    chart.data.labels.shift(); // Menghapus label pertama jika sudah ada lebih dari 20 label
+    chart.data.datasets.forEach((ds) => ds.data.shift()); // Menghapus data pertama jika sudah ada lebih dari 20 data
   }
 
+  // Memperbarui data untuk setiap sumbu X, Y, Z
   ["X", "Y", "Z"].forEach((axis, i) => {
-    chart.data.datasets[i].data.push(data[accelOrGyro][i]);
+    chart.data.datasets[i].data.push(data[accelOrGyro][i]); // Menambahkan data akselerometer/giroskop untuk sumbu X, Y, Z
     chart.data.datasets[i].borderColor = isRunning
-      ? chart.originalColors[i]
-      : "gray";
+      ? chart.originalColors[i] // Jika sistem berjalan, warna tetap seperti yang diatur sebelumnya
+      : "gray"; // Jika sistem tidak berjalan, warna menjadi abu-abu
   });
 
-  chart.update();
+  chart.update(); // Memperbarui grafik dengan data terbaru
 }
 
 function playRandomSound() {
@@ -146,7 +144,7 @@ function playRandomSound() {
   let randomIndex;
 
   if (!isSFXEnabled || !isRunning) {
-    // Jika SFX dimatikan, jangan putar suara
+    // Jika SFX dimatikan atau sistem tidak berjalan, tidak perlu memutar suara
     return;
   }
 
@@ -159,87 +157,89 @@ function playRandomSound() {
   ];
 
   do {
-    randomIndex = Math.floor(Math.random() * mp3Files.length);
-  } while (randomIndex === lastIndex && mp3Files.length > 1);
+    randomIndex = Math.floor(Math.random() * mp3Files.length); // Memilih file suara secara acak
+  } while (randomIndex === lastIndex && mp3Files.length > 1); // Menghindari pemutaran suara yang sama berturut-turut
 
   lastIndex = randomIndex;
 
   const audio = document.getElementById("comboSound");
-  audio.src = mp3Files[randomIndex];
-  audio.volume = audio.play(); //0.5; play 50%
+  audio.src = mp3Files[randomIndex]; // Mengatur sumber suara acak
+  audio.volume = audio.play(); // Memutar suara dengan volume 50%
 }
 
 async function fetchAndUpdate(endpoint, prefix) {
   if (!isRunning) {
+    // Jika sistem tidak berjalan, set warna grafik menjadi abu-abu
     ["accel", "gyro"].forEach((type) => {
       const chart = charts[`${prefix}${type}`];
-      chart.data.datasets.forEach((ds) => (ds.borderColor = "gray"));
-      chart.update();
+      chart.data.datasets.forEach((ds) => (ds.borderColor = "gray")); // Set warna dataset menjadi abu-abu
+      chart.update(); // Memperbarui grafik dengan warna abu-abu
     });
     return;
   }
 
   try {
-    const res = await fetch(endpoint);
-    const data = await res.json();
-    updateCharts(charts[`${prefix}accel`], "accel", data);
-    updateCharts(charts[`${prefix}gyro`], "gyro", data);
+    const res = await fetch(endpoint); // Mengambil data dari server
+    const data = await res.json(); // Mengkonversi data ke format JSON
+    updateCharts(charts[`${prefix}accel`], "accel", data); // Memperbarui grafik akselerometer
+    updateCharts(charts[`${prefix}gyro`], "gyro", data); // Memperbarui grafik giroskop
   } catch (err) {
-    console.error(`Fetch error for ${prefix}:`, err);
+    console.error(`Fetch error for ${prefix}:`, err); // Menangani error saat pengambilan data
   }
 }
 
 function updatePunchDisplay() {
   const box = document.getElementById("punchBox");
   if (punchSequence.length === 0) {
-    box.textContent = "NO PUNCH";
+    box.textContent = "NO PUNCH"; // Menampilkan "NO PUNCH" jika tidak ada pukulan
   } else {
-    const latest = punchSequence[punchSequence.length - 1];
+    const latest = punchSequence[punchSequence.length - 1]; // Mendapatkan pukulan terakhir
     box.innerHTML = `
           <div class="text-xl">${punchSequence.slice(0, -1).join(" → ")}</div>
           <div class="text-3xl font-bold text-blue-600">${latest}</div>
-        `;
+        `; // Menampilkan urutan pukulan dengan pukulan terakhir lebih besar
   }
 }
 
 async function fetchPunchClassification() {
   try {
-    const res = await fetch("/last_punch");
-    const punchArray = await res.json();
+    const res = await fetch("/last_punch"); // Mengambil data pukulan terakhir dari server
+    const punchArray = await res.json(); // Mengkonversi data JSON
 
     if (punchArray.length > 0) {
       const punchData = punchArray.reduce((latest, current) =>
         new Date(current.timestamp) > new Date(latest.timestamp)
           ? current
           : latest
-      );
+      ); // Menentukan pukulan terbaru berdasarkan timestamp
 
-      const newTimestamp = new Date(punchData.timestamp).getTime();
+      const newTimestamp = new Date(punchData.timestamp).getTime(); // Mendapatkan timestamp baru
 
       if (
         newTimestamp !== lastPunchTimestamp ||
         punchData.punch_type !== lastPunchType ||
         punchData.device_id !== lastDeviceId
       ) {
+        // Jika ada pukulan baru, memperbarui data
         lastPunchTimestamp = newTimestamp;
         lastPunchType = punchData.punch_type;
         lastDeviceId = punchData.device_id;
 
-        // Update sequence and trim to max 10
+        // Memperbarui urutan pukulan dan memastikan maksimal 10 pukulan
         punchSequence.push(punchData.punch_type);
         if (punchSequence.length > 10) punchSequence.shift();
 
-        updatePunchDisplay();
-        playPunchSound(punchData.punch_type);
+        updatePunchDisplay(); // Memperbarui tampilan urutan pukulan
+        playPunchSound(punchData.punch_type); // Memainkan suara berdasarkan jenis pukulan
 
-        if (comboTimeout) clearTimeout(comboTimeout);
+        if (comboTimeout) clearTimeout(comboTimeout); // Menghapus timeout jika ada pukulan baru
         comboTimeout = setTimeout(() => {
-          playRandomSound();
+          playRandomSound(); // Memutar suara combo setelah 2 detik
           punchSequence = [];
           updatePunchDisplay();
-        }, 2000); // waktu tunggu 2 detik setelah pukulan terakhir
+        }, 2000); // Timeout 2 detik setelah pukulan terakhir
 
-        // Update table
+        // Memperbarui tabel dengan informasi pukulan terbaru
         const row = document.createElement("tr");
         row.innerHTML = `
               <td class="py-1 px-4 border">${punchData.timestamp}</td>
@@ -248,18 +248,18 @@ async function fetchPunchClassification() {
             `;
 
         const table = document.getElementById("punchLogTable");
-        if (table.querySelector("td.italic")) table.innerHTML = "";
-        table.prepend(row);
-        while (table.rows.length > 10) table.deleteRow(-1);
+        if (table.querySelector("td.italic")) table.innerHTML = ""; // Menghapus data lama jika ada
+        table.prepend(row); // Menambahkan pukulan baru ke atas tabel
+        while (table.rows.length > 10) table.deleteRow(-1); // Menjaga hanya 10 baris terbaru
       }
     }
   } catch (e) {
-    console.error("Gagal fetch punch_type:", e);
+    console.error("Gagal fetch punch_type:", e); // Menangani error saat mengambil data pukulan
   }
 }
 
 function playPunchSound(punchType) {
-  if (!isSFXEnabled) return;
+  if (!isSFXEnabled) return; // Jika efek suara (SFX) dimatikan, tidak memutar suara
 
   const soundMap = {
     JAB: document.getElementById("jabSound"),
@@ -269,14 +269,14 @@ function playPunchSound(punchType) {
   };
 
   const sound =
-    soundMap[punchType.toUpperCase()] ||
-    document.getElementById("defaultSound");
+    soundMap[punchType.toUpperCase()] || // Pilih suara sesuai dengan jenis pukulan
+    document.getElementById("defaultSound"); // Jika jenis pukulan tidak ada, pilih suara default
 
   if (sound) {
-    sound.currentTime = 0;
-    sound.play().catch((e) => console.log("Sound effect play error:", e));
+    sound.currentTime = 0; // Mulai suara dari awal
+    sound.play().catch((e) => console.log("Sound effect play error:", e)); // Mainkan suara, tangkap error jika ada
   } else {
-    console.warn("Punch type tidak dikenal:", punchType);
+    console.warn("Punch type tidak dikenal:", punchType); // Jika jenis pukulan tidak ditemukan, tampilkan peringatan
   }
 }
 
@@ -285,15 +285,15 @@ setInterval(() => {
   fetchAndUpdate("/data/right", "right");
 
   if (isRunning) {
-    fetchPunchClassification();
+    fetchPunchClassification(); // Mengambil klasifikasi pukulan jika sistem berjalan
 
-    // Check if punch is too old, then show "NO PUNCH"
+    // Cek jika pukulan sudah terlalu lama, maka tampilkan "NO PUNCH"
     if (Date.now() - lastPunchTimestamp > punchTimeout) {
-      punchSequence = [];
-      updatePunchDisplay();
+      punchSequence = []; // Reset urutan pukulan
+      updatePunchDisplay(); // Memperbarui tampilan pukulan
     }
   }
-}, 100);
+}, 100); // Interval pengambilan data setiap 100ms
 
 if (!isRunning) {
   document.getElementById("punchBox").textContent = "NO PUNCH";
@@ -310,7 +310,7 @@ toggleButton.addEventListener("click", async () => {
     ? document.getElementById("stopSound")
     : document.getElementById("startSound");
   sound.currentTime = 0;
-  sound.play().catch((err) => console.warn("Audio play error:", err));
+  sound.play().catch((err) => console.warn("Audio play error:", err)); // Memutar suara mulai atau berhenti
 
   const backgroundMusic = document.getElementById("backgroundMusic");
 
@@ -318,46 +318,48 @@ toggleButton.addEventListener("click", async () => {
     await fetch("/mqtt-control", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status }), // Mengirim status latihan ke server
     });
   } catch (e) {
-    console.error("Failed to send MQTT command", e);
+    console.error("Failed to send MQTT command", e); // Menangani error pengiriman perintah ke server
   }
 
-  isRunning = !isRunning;
+  isRunning = !isRunning; // Mengubah status sistem
 
   if (isRunning && isBacksoundEnabled) {
     setTimeout(() => {
       backgroundMusic.currentTime = 0;
       backgroundMusic
         .play()
-        .catch((err) => console.warn("Backsound error:", err));
+        .catch((err) => console.warn("Backsound error:", err)); // Memutar musik latar belakang setelah 2 detik
     }, 2000);
-    backgroundMusic.volume = 0.2; // 20% volume
+    backgroundMusic.volume = 1; // Set volume musik latar
   } else {
-    backgroundMusic.pause();
-    backgroundMusic.currentTime = 0;
+    backgroundMusic.pause(); // Berhentikan musik latar
+    backgroundMusic.currentTime = 0; // Set waktu musik ke awal
   }
 
+  // Memperbarui teks dan tampilan tombol berdasarkan status sistem
   toggleButton.textContent = isRunning ? "Akhiri Latihan" : "Mulai Latihan";
   statusText.textContent = isRunning ? "ON" : "OFF";
   toggleButton.classList.toggle("bg-blue-600", isRunning);
   toggleButton.classList.toggle("bg-gray-400", !isRunning);
 
   statusText.textContent = isRunning ? "ON" : "OFF";
-  statusDot.className = `inline-block w-2 h-2 rounded-full mr-1 align-middle ${isRunning ? "bg-green-500" : "bg-gray-400"
-    }`;
+  statusDot.className = `inline-block w-2 h-2 rounded-full mr-1 align-middle ${
+    isRunning ? "bg-green-500" : "bg-gray-400"
+  }`;
 });
 
 document.getElementById("toggle-backsound").addEventListener("change", (e) => {
-  isBacksoundEnabled = e.target.checked;
+  isBacksoundEnabled = e.target.checked; // Menyimpan status apakah backsound diaktifkan
   if (!isBacksoundEnabled) {
-    backgroundMusic.pause();
+    backgroundMusic.pause(); // Berhentikan musik latar jika tidak aktif
   }
 });
 
 document.getElementById("toggle-sfx").addEventListener("change", (e) => {
-  isSFXEnabled = e.target.checked;
+  isSFXEnabled = e.target.checked; // Menyimpan status apakah SFX diaktifkan
 });
 
 // Toggle backsound
@@ -383,19 +385,19 @@ function initialize3DPlot(id) {
     id,
     [
       {
-        type: "scatter3d",
+        type: "scatter3d", // Tipe plot 3D
         mode: "lines+markers",
-        x: [[]], // empty trace
-        y: [[]],
-        z: [[]],
-        name: "Accel Data",
+        x: [[]], // Data kosong untuk sumbu X
+        y: [[]], // Data kosong untuk sumbu Y
+        z: [[]], // Data kosong untuk sumbu Z
+        name: "Accel Data", // Nama data
         marker: {
           size: 4,
-          color: id.includes("left") ? "red" : "blue",
+          color: id.includes("left") ? "red" : "blue", // Warna marker tergantung sisi (kiri/kanan)
         },
         line: {
           width: 4,
-          color: id.includes("left") ? "red" : "blue",
+          color: id.includes("left") ? "red" : "blue", // Warna garis tergantung sisi (kiri/kanan)
         },
       },
     ],
@@ -403,9 +405,9 @@ function initialize3DPlot(id) {
       responsive: false,
       margin: { l: 0, r: 0, b: 0, t: 0 },
       scene: {
-        xaxis: { range: [-50, 50] },
-        yaxis: { range: [-50, 50] },
-        zaxis: { range: [-50, 50] },
+        xaxis: { range: [-50, 50] }, // Rentang sumbu X
+        yaxis: { range: [-50, 50] }, // Rentang sumbu Y
+        zaxis: { range: [-50, 50] }, // Rentang sumbu Z
       },
     }
   );
@@ -418,17 +420,27 @@ function updateOrientation(side, gyro, dt = 0.016) {
   ori.yaw += gyro[2] * dt;
 }
 
+function updateOrientation(side, gyro, dt = 0.016) {
+  const ori = imu_orientation[side];
+  ori.roll += gyro[0] * dt; // Memperbarui roll berdasarkan data giroskop
+  ori.pitch += gyro[1] * dt; // Memperbarui pitch berdasarkan data giroskop
+  ori.yaw += gyro[2] * dt; // Memperbarui yaw berdasarkan data giroskop
+}
+
 function rotateAccelToGlobal(accel, ori) {
-  const toRad = (deg) => deg * (Math.PI / 180);
+  const toRad = (deg) => deg * (Math.PI / 180); // Mengonversi derajat ke radian
 
   const roll = toRad(ori.roll);
   const pitch = toRad(ori.pitch);
   const yaw = toRad(ori.yaw);
 
-  // Build rotation matrix (Yaw-Pitch-Roll order)
-  const cy = Math.cos(yaw), sy = Math.sin(yaw);
-  const cp = Math.cos(pitch), sp = Math.sin(pitch);
-  const cr = Math.cos(roll), sr = Math.sin(roll);
+  // Matriks rotasi (Urutan Yaw-Pitch-Roll)
+  const cy = Math.cos(yaw),
+    sy = Math.sin(yaw);
+  const cp = Math.cos(pitch),
+    sp = Math.sin(pitch);
+  const cr = Math.cos(roll),
+    sr = Math.sin(roll);
 
   const R = [
     [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
@@ -442,7 +454,7 @@ function rotateAccelToGlobal(accel, ori) {
   const gy = R[1][0] * ax + R[1][1] * ay + R[1][2] * az;
   const gz = R[2][0] * ax + R[2][1] * ay + R[2][2] * az;
 
-  return [gx, gy, gz];
+  return [gx, gy, gz]; // Mengembalikan vektor akselerasi yang sudah diputar
 }
 
 // Fungsi untuk memperbarui plot 3D dengan data akselerometer baru
@@ -468,8 +480,6 @@ function updateAccel3D(side, data) {
     10
   );
 }
-
-
 
 // Fungsi untuk mengambil data accelerometer dari server
 async function fetchAccelData() {
