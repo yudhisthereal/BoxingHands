@@ -42,7 +42,7 @@ https://www.youtube.com/watch?v=Lp42CQmZ05o
 1. **Data Collection**  
    ESP32-based wearable captures IMU data from the boxer's hands (left & right). Data is streamed using **MQTT** to a Python backend.
 
-2. **Data Logging**  
+2. **Data Logging and Labeling**  
    The system can enter a **Recording Mode** to save IMU data as CSV files, which are later used to train the punch classification model.
 
    Below are sample IMU data visualizations for each punch type:
@@ -59,7 +59,7 @@ https://www.youtube.com/watch?v=Lp42CQmZ05o
    ### 🥊 Uppercut  
    ![Uppercut IMU Data Visualization](attachments/imu-uppercut.png)
 
-   > The visualizations above are done using `imu_visualizer.py`
+   > 💡 **Note:** The visualizations above were generated using `util/imu_visualizer.py`.
 
 3. **Model**  
    A 1D CNN model is trained on labeled punch sequences, converted to **TFLM** format, and deployed to the ESP32.

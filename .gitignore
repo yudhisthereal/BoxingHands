@@ -5,5 +5,4 @@
 .vscode/ipch
 lib/env
 capstone-env
-*.csv
 web-dashboard/punch_data.db
