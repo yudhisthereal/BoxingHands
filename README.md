@@ -87,6 +87,7 @@ python app.py
 # Frontend (optional tweaks)
 cd static
 # Make changes and serve statically if needed
+```
 
 ...
 

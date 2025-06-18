@@ -469,14 +469,17 @@ void loop()
 
         const char *punchLabel = punchTypes[predictedClass];
         String punchLabelStr = String(punchLabel);
-#if LEFT
+
+        #if LEFT
         String result = punchLabelStr + ", Left";
-#elif RIGHT
+        #elif RIGHT
         String result = punchLabelStr + ", Right";
-#endif
-#if USE_SERIAL
+        #endif
+
+        #if USE_SERIAL
         Serial.println("PUNCH: " + punchLabelStr);
-#endif
+        #endif
+        
         // Only publish if confident and NOT "NO PUNCH"
         if (punchLabelStr != "NO PUNCH")
         {
