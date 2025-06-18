@@ -5,7 +5,7 @@ An AI-powered wearable system that classifies boxing punches in real time using 
 ---
 
 ## 📸 Demo
-https://github.com/user-attachments/assets/04144166-a8ab-4c96-aef9-0380047c5dc8
+https://github.com/user-attachments/assets/90add889-e57f-4209-b5c9-7803c28084ae
 
 ---
 
