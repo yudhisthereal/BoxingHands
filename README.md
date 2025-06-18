@@ -6,7 +6,7 @@ An AI-powered wearable system that classifies boxing punches in real time using 
 
 ## 📸 Demo
 
-https://www.youtube.com/watch?v=YOUR_DEMO_LINK_HERE
+https://www.youtube.com/watch?v=Lp42CQmZ05o
 
 ---
 
