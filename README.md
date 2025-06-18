@@ -6,7 +6,7 @@ An AI-powered wearable system that classifies boxing punches in real time using 
 
 ## 📸 Demo
 
-<video controls src="attachments/capstone-demo.mp4" title="Boxing Hands Demo"></video>
+https://github.com/yudhisthereal/BoxingHands/blob/master/attachments/capstone-demo.mp4
 
 ---
 
