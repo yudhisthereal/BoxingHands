@@ -58,7 +58,9 @@ https://www.youtube.com/watch?v=Lp42CQmZ05o
 
    ### 🥊 Uppercut  
    ![Uppercut IMU Data Visualization](attachments/imu-uppercut.png)
-   
+
+   > The visualizations above are done using `imu_visualizer.py`
+
 3. **Model**  
    A 1D CNN model is trained on labeled punch sequences, converted to **TFLM** format, and deployed to the ESP32.
 
