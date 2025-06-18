@@ -15,9 +15,12 @@ An AI-powered wearable system that classifies boxing punches in real time using 
 - 🔁 **Real-time punch classification** using IMU (accelerometer & gyroscope) data via MQTT
 - 💾 **Training data logging** to CSV files for future model training
 - 🧠 **1D CNN model** deployed with TensorFlow Lite for Microcontrollers (TFLM) on ESP32
+   ![1D CNN Architecture](attachments/image.png)
 - 📈 **Web dashboard** with Tailwind, Chart.js, and Plotly:
   - 2D sensor data graphs (accelerometer and gyroscope)
+  ![alt text](attachments/2d-dashboard.png)
   - 3D visualization toggle
+  ![alt text](attachments/3d-dashboard.png)
   - Sound effect toggle
   - Punch history stored locally with SQLite
 - 🔧 **Multi-sensor** (left & right hand) support
