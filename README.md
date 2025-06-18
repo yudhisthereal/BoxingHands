@@ -6,7 +6,7 @@ An AI-powered wearable system that classifies boxing punches in real time using 
 
 ## 📸 Demo
 
-https://www.youtube.com/watch?v=Lp42CQmZ05o
+<video controls src="attachments/capstone-demo.mp4" title="Boxing Hands Demo"></video>
 
 ---
 
@@ -125,7 +125,7 @@ We thank everyone who helped shape this project!
 
 - [@Yudhistira](https://github.com/yudhisthereal) – system architecture, embedded AI, firmware, TFLM integration
 - [@shadamjverron](https://github.com/shadamjv) – MQTT backend, Flask API, SQLite punch history
-- [@rafialutfi]() – dashboard UI, Tailwind + Chart.js/Plotly integration
+- [@rafialutfi](https://github.com/Rafialutfiz) – dashboard UI, Tailwind + Chart.js/Plotly integration
 - [@fahmirobbani]() – model training, evaluation, video editing
 - [@rifatfadlillah]() – hardware design, sensor wiring, ESP32 integration
 
